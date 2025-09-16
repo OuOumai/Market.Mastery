@@ -1,348 +1,277 @@
-import React, { useContext, useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useUser, SignOutButton } from '@clerk/clerk-react'
-import { AppContext } from '../../context/AppContext'
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import CourseCard from '../../components/student/CourseCard';
+import Loading from '../../components/student/Loading';
+import './StudentDashboard.css';
 
 const StudentDashboard = () => {
-  const navigate = useNavigate()
-  const { user } = useUser()
-  const { courses, loading, userRole, ROLES } = useContext(AppContext)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('all')
-  const [enrolledCourses, setEnrolledCourses] = useState([])
-  const [userProgress, setUserProgress] = useState({})
+  const [courses, setCourses] = useState([]);
+  const [recentCourses, setRecentCourses] = useState([]);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    totalCourses: 0,
+    enrolledCount: 0,
+    completedCount: 0,
+    inProgressCount: 0
+  });
+  const navigate = useNavigate();
 
-  // Initialize enrolled courses and progress from localStorage
   useEffect(() => {
-    if (user) {
-      const enrolled = JSON.parse(localStorage.getItem(`enrolledCourses_${user.id}`) || '[]')
-      const progress = JSON.parse(localStorage.getItem(`userProgress_${user.id}`) || '{}')
-      setEnrolledCourses(enrolled)
-      setUserProgress(progress)
-    }
-  }, [user])
+    fetchDashboardData();
+  }, []);
 
-  // Protect route - redirect if not student
-  useEffect(() => {
-    if (userRole && userRole !== ROLES.STUDENT) {
-      navigate('/educator/dashboard')
-    }
-  }, [userRole, navigate, ROLES])
-
-  // Filter courses
-  const filteredCourses = courses.filter(course => {
-    const matchesSearch = course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         course.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = selectedCategory === 'all' || 
-                           selectedCategory === 'enrolled' && enrolledCourses.includes(course.id) ||
-                           selectedCategory === 'available' && !enrolledCourses.includes(course.id)
-    return matchesSearch && matchesCategory
-  })
-
-  // Get categories
-  const categories = [
-    { id: 'all', name: 'Tous les cours', count: courses.length },
-    { id: 'enrolled', name: 'Mes cours', count: enrolledCourses.length },
-    { id: 'available', name: 'Disponibles', count: courses.length - enrolledCourses.length }
-  ]
-
-  // Enroll in course
-  const enrollInCourse = (courseId) => {
-    if (!enrolledCourses.includes(courseId)) {
-      const newEnrolled = [...enrolledCourses, courseId]
-      setEnrolledCourses(newEnrolled)
-      localStorage.setItem(`enrolledCourses_${user.id}`, JSON.stringify(newEnrolled))
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
       
-      // Initialize progress for this course
-      const newProgress = { ...userProgress }
-      newProgress[courseId] = { completed: 0, total: courses.find(c => c.id === courseId)?.totalLectures || 0 }
-      setUserProgress(newProgress)
-      localStorage.setItem(`userProgress_${user.id}`, JSON.stringify(newProgress))
-    }
-  }
-
-  // Start course
-  const startCourse = (courseId) => {
-    navigate(`/course/${courseId}`)
-  }
-
-  // Calculate overall progress
-  const calculateOverallProgress = () => {
-    if (enrolledCourses.length === 0) return 0
-    const totalProgress = enrolledCourses.reduce((acc, courseId) => {
-      const progress = userProgress[courseId]
-      if (progress && progress.total > 0) {
-        return acc + (progress.completed / progress.total) * 100
+      // Fetch all courses
+      const response = await fetch('http://localhost:5000/api/courses');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch courses');
       }
-      return acc
-    }, 0)
-    return Math.round(totalProgress / enrolledCourses.length)
-  }
+      
+      const coursesData = await response.json();
+      
+      // Process courses data
+      setCourses(coursesData);
+      
+      // For now, we'll simulate enrolled courses
+      // In a real app, you'd have user enrollment data
+      const mockEnrolledCourses = coursesData.slice(0, Math.min(3, coursesData.length));
+      setEnrolledCourses(mockEnrolledCourses);
+      
+      // Get recent courses (last 4)
+      const recent = coursesData
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 4);
+      setRecentCourses(recent);
+      
+      // Calculate stats
+      setStats({
+        totalCourses: coursesData.length,
+        enrolledCount: mockEnrolledCourses.length,
+        completedCount: 0, // Mock data - implement based on your progress tracking
+        inProgressCount: mockEnrolledCourses.length
+      });
+      
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCourseClick = (courseFolder) => {
+    navigate(`/student/course/${courseFolder}`);
+  };
+
+  const handleViewAllCourses = () => {
+    navigate('/student/courses');
+  };
+
+  const handleViewEnrollments = () => {
+    navigate('/student/enrollments');
+  };
 
   if (loading) {
+    return <Loading />;
+  }
+
+  if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement de vos cours...</p>
+      <div className="student-dashboard">
+        <div className="error-message">
+          <h2>Error Loading Dashboard</h2>
+          <p>{error}</p>
+          <button onClick={fetchDashboardData} className="retry-btn">
+            Try Again
+          </button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">MM</span>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-800">Market.Mastery</h1>
-                <p className="text-sm text-gray-500">Dashboard Étudiant</p>
-              </div>
+    <div className="student-dashboard">
+      {/* Dashboard Header */}
+      <div className="dashboard-header">
+        <div className="welcome-section">
+          <h1>Welcome Back!</h1>
+          <p>Continue your learning journey with our courses</p>
+        </div>
+        
+        <div className="quick-actions">
+          <button onClick={handleViewAllCourses} className="action-btn primary">
+            Browse All Courses
+          </button>
+          <button onClick={handleViewEnrollments} className="action-btn secondary">
+            My Enrollments
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="stats-section">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon">📚</div>
+            <div className="stat-content">
+              <h3>{stats.totalCourses}</h3>
+              <p>Available Courses</p>
             </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-800">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-xs text-gray-500">Étudiant</p>
-              </div>
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-blue-600 font-semibold text-sm">
-                  {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
-                </span>
-              </div>
-              <SignOutButton>
-                <button className="text-gray-500 hover:text-gray-700">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                </button>
-              </SignOutButton>
+          </div>
+          
+          <div className="stat-card">
+            <div className="stat-icon">✅</div>
+            <div className="stat-content">
+              <h3>{stats.enrolledCount}</h3>
+              <p>Enrolled Courses</p>
+            </div>
+          </div>
+          
+          <div className="stat-card">
+            <div className="stat-icon">📈</div>
+            <div className="stat-content">
+              <h3>{stats.inProgressCount}</h3>
+              <p>In Progress</p>
+            </div>
+          </div>
+          
+          <div className="stat-card">
+            <div className="stat-icon">🏆</div>
+            <div className="stat-content">
+              <h3>{stats.completedCount}</h3>
+              <p>Completed</p>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            Bienvenue, {user?.firstName}!
-          </h2>
-          <p className="text-gray-600">
-            Continuez votre apprentissage en marketing digital
-          </p>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-sm border">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm text-gray-500">Cours inscrits</p>
-                <p className="text-2xl font-bold text-gray-800">{enrolledCourses.length}</p>
-              </div>
-            </div>
+      {/* Continue Learning Section */}
+      {enrolledCourses.length > 0 && (
+        <div className="section">
+          <div className="section-header">
+            <h2>Continue Learning</h2>
+            <button onClick={handleViewEnrollments} className="view-all-btn">
+              View All Enrollments →
+            </button>
           </div>
-
-          <div className="bg-white rounded-xl p-6 shadow-sm border">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm text-gray-500">Progression</p>
-                <p className="text-2xl font-bold text-gray-800">{calculateOverallProgress()}%</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl p-6 shadow-sm border">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm text-gray-500">Quiz terminés</p>
-                <p className="text-2xl font-bold text-gray-800">0</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl p-6 shadow-sm border">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm text-gray-500">Heures étudiées</p>
-                <p className="text-2xl font-bold text-gray-800">{enrolledCourses.length * 2}h</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Search and Filter */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-            <div className="flex-1 md:mr-6">
-              <div className="relative">
-                <svg className="w-5 h-5 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Rechercher un cours..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          
+          <div className="courses-grid">
+            {enrolledCourses.map((course) => (
+              <div key={course.folderName} className="enrolled-course-card">
+                <CourseCard
+                  course={course}
+                  onClick={() => handleCourseClick(course.folderName)}
+                  onEnroll={() => handleCourseClick(course.folderName)}
                 />
-              </div>
-            </div>
-            
-            <div className="flex space-x-2">
-              {categories.map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setSelectedCategory(category.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    selectedCategory === category.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {category.name} ({category.count})
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Courses Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCourses.map((course) => {
-            const isEnrolled = enrolledCourses.includes(course.id)
-            const progress = userProgress[course.id]
-            const progressPercent = progress ? Math.round((progress.completed / progress.total) * 100) : 0
-
-            return (
-              <div key={course.id} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow">
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                      </svg>
-                    </div>
-                    {isEnrolled && (
-                      <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
-                        Inscrit
-                      </span>
-                    )}
+                
+                {/* Progress Bar */}
+                <div className="course-progress">
+                  <div className="progress-header">
+                    <span>Progress</span>
+                    <span>0%</span> {/* Mock progress - implement based on your tracking */}
                   </div>
-
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2 line-clamp-2">
-                    {course.name}
-                  </h3>
-                  
-                  <p className="text-sm text-gray-600 mb-4 line-clamp-3">
-                    {course.description}
-                  </p>
-
-                  <div className="flex items-center space-x-4 text-xs text-gray-500 mb-4">
-                    <span className="flex items-center">
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      {course.chapters?.length || 0} chapitres
-                    </span>
-                    <span className="flex items-center">
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      {course.duration || '2h'}
-                    </span>
-                  </div>
-
-                  {isEnrolled && progress && (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                        <span>Progression</span>
-                        <span>{progressPercent}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${progressPercent}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex space-x-2">
-                    {isEnrolled ? (
-                      <button
-                        onClick={() => startCourse(course.id)}
-                        className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                      >
-                        Continuer le cours
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => enrollInCourse(course.id)}
-                        className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-                      >
-                        S'inscrire
-                      </button>
-                    )}
-                    
-                    <button
-                      onClick={() => navigate(`/course/${course.id}`)}
-                      className="bg-gray-100 text-gray-600 py-2 px-4 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-                    >
-                      Aperçu
-                    </button>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: '0%' }}></div>
                   </div>
                 </div>
+                
+                <button 
+                  onClick={() => handleCourseClick(course.folderName)}
+                  className="continue-btn"
+                >
+                  Continue Learning
+                </button>
               </div>
-            )
-          })}
-        </div>
-
-        {filteredCourses.length === 0 && (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-800 mb-2">Aucun cours trouvé</h3>
-            <p className="text-gray-600">
-              {searchTerm ? 'Aucun cours ne correspond à votre recherche.' : 'Aucun cours disponible dans cette catégorie.'}
-            </p>
+            ))}
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Recent Courses Section */}
+      {recentCourses.length > 0 && (
+        <div className="section">
+          <div className="section-header">
+            <h2>Recently Added Courses</h2>
+            <button onClick={handleViewAllCourses} className="view-all-btn">
+              View All Courses →
+            </button>
+          </div>
+          
+          <div className="courses-grid">
+            {recentCourses.map((course) => (
+              <CourseCard
+                key={course.folderName}
+                course={course}
+                onClick={() => handleCourseClick(course.folderName)}
+                onEnroll={() => handleCourseClick(course.folderName)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {courses.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-icon">📚</div>
+          <h2>No Courses Available</h2>
+          <p>There are currently no courses available. Check back later for new content!</p>
+          <button onClick={fetchDashboardData} className="refresh-btn">
+            Refresh Dashboard
+          </button>
+        </div>
+      )}
+
+      {/* Learning Tips Section */}
+      <div className="learning-tips">
+        <h2>Learning Tips</h2>
+        <div className="tips-grid">
+          <div className="tip-card">
+            <div className="tip-icon">🎯</div>
+            <h3>Set Learning Goals</h3>
+            <p>Define clear objectives for each course to stay motivated and track progress.</p>
+          </div>
+          
+          <div className="tip-card">
+            <div className="tip-icon">⏰</div>
+            <h3>Consistent Schedule</h3>
+            <p>Dedicate specific time slots for learning to build a sustainable routine.</p>
+          </div>
+          
+          <div className="tip-card">
+            <div className="tip-icon">📝</div>
+            <h3>Take Notes</h3>
+            <p>Write down key concepts and insights to reinforce your learning.</p>
+          </div>
+          
+          <div className="tip-card">
+            <div className="tip-icon">🤝</div>
+            <h3>Practice Regularly</h3>
+            <p>Apply what you learn through exercises and real-world projects.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions Footer */}
+      <div className="dashboard-footer">
+        <div className="footer-actions">
+          <button onClick={fetchDashboardData} className="refresh-dashboard-btn">
+            🔄 Refresh Dashboard
+          </button>
+          <button onClick={handleViewAllCourses} className="explore-courses-btn">
+            🔍 Explore All Courses
+          </button>
+        </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default StudentDashboard
+export default StudentDashboard;

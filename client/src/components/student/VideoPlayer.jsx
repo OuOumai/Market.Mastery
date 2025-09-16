@@ -1,15 +1,7 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { assets } from '../../assets/assets';
+import React, { useState, useRef, useEffect } from 'react';
+import './VideoPlayer.css';
 
-const VideoPlayer = ({ 
-  videoUrl, 
-  title, 
-  description, 
-  onVideoEnd, 
-  onVideoError,
-  isPreview = false,
-  className = ""
-}) => {
+const VideoPlayer = ({ videoUrl, videoTitle, onClose }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -17,25 +9,20 @@ const VideoPlayer = ({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [showControls, setShowControls] = useState(true);
 
-  // Format time in MM:SS format
-  const formatTime = (time) => {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
+  let controlsTimeout = useRef(null);
 
-  // Handle video load
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const handleLoadedMetadata = () => {
       setDuration(video.duration);
-      setIsLoading(false);
+      setLoading(false);
     };
 
     const handleTimeUpdate = () => {
@@ -44,17 +31,15 @@ const VideoPlayer = ({
 
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
-    const handleEnded = () => {
-      setIsPlaying(false);
-      onVideoEnd && onVideoEnd();
+    const handleEnded = () => setIsPlaying(false);
+    
+    const handleError = () => {
+      setError('Failed to load video');
+      setLoading(false);
     };
 
-    const handleError = (e) => {
-      console.error('Video error:', e);
-      setError('Failed to load video');
-      setIsLoading(false);
-      onVideoError && onVideoError(e);
-    };
+    const handleLoadStart = () => setLoading(true);
+    const handleCanPlay = () => setLoading(false);
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -62,6 +47,8 @@ const VideoPlayer = ({
     video.addEventListener('pause', handlePause);
     video.addEventListener('ended', handleEnded);
     video.addEventListener('error', handleError);
+    video.addEventListener('loadstart', handleLoadStart);
+    video.addEventListener('canplay', handleCanPlay);
 
     return () => {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -70,48 +57,58 @@ const VideoPlayer = ({
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('error', handleError);
+      video.removeEventListener('loadstart', handleLoadStart);
+      video.removeEventListener('canplay', handleCanPlay);
     };
-  }, [onVideoEnd, onVideoError]);
+  }, [videoUrl]);
 
-  // Handle play/pause
-  const togglePlay = () => {
+  // Auto-hide controls
+  useEffect(() => {
+    const resetControlsTimeout = () => {
+      if (controlsTimeout.current) {
+        clearTimeout(controlsTimeout.current);
+      }
+      setShowControls(true);
+      controlsTimeout.current = setTimeout(() => {
+        if (isPlaying) {
+          setShowControls(false);
+        }
+      }, 3000);
+    };
+
+    resetControlsTimeout();
+    return () => {
+      if (controlsTimeout.current) {
+        clearTimeout(controlsTimeout.current);
+      }
+    };
+  }, [isPlaying]);
+
+  const togglePlayPause = () => {
     const video = videoRef.current;
-    if (!video) return;
-
-    if (video.paused) {
-      video.play();
-    } else {
+    if (isPlaying) {
       video.pause();
+    } else {
+      video.play();
     }
   };
 
-  // Handle seek
   const handleSeek = (e) => {
     const video = videoRef.current;
-    if (!video) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const newTime = (clickX / rect.width) * duration;
-    video.currentTime = newTime;
+    const rect = e.target.getBoundingClientRect();
+    const pos = (e.clientX - rect.left) / rect.width;
+    video.currentTime = pos * duration;
   };
 
-  // Handle volume change
   const handleVolumeChange = (e) => {
-    const video = videoRef.current;
-    if (!video) return;
-
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
-    video.volume = newVolume;
+    videoRef.current.volume = newVolume;
     setIsMuted(newVolume === 0);
   };
 
-  // Handle mute toggle
   const toggleMute = () => {
     const video = videoRef.current;
-    if (!video) return;
-
     if (isMuted) {
       video.volume = volume;
       setIsMuted(false);
@@ -121,171 +118,136 @@ const VideoPlayer = ({
     }
   };
 
-  // Handle fullscreen
-  const toggleFullscreen = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (!document.fullscreenElement) {
-      video.requestFullscreen();
+  const toggleFullscreen = async () => {
+    const container = document.querySelector('.video-player-container');
+    
+    if (!isFullscreen) {
+      if (container.requestFullscreen) {
+        await container.requestFullscreen();
+      } else if (container.webkitRequestFullscreen) {
+        await container.webkitRequestFullscreen();
+      } else if (container.msRequestFullscreen) {
+        await container.msRequestFullscreen();
+      }
       setIsFullscreen(true);
     } else {
-      document.exitFullscreen();
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        await document.msExitFullscreen();
+      }
       setIsFullscreen(false);
     }
   };
 
-  // Handle keyboard shortcuts
-  useEffect(() => {
-    const handleKeyPress = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const changePlaybackRate = (rate) => {
+    setPlaybackRate(rate);
+    videoRef.current.playbackRate = rate;
+  };
 
-      switch (e.code) {
-        case 'Space':
-          e.preventDefault();
-          togglePlay();
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          videoRef.current.currentTime = Math.min(duration, videoRef.current.currentTime + 10);
-          break;
-        case 'KeyM':
-          e.preventDefault();
-          toggleMute();
-          break;
-        case 'KeyF':
-          e.preventDefault();
-          toggleFullscreen();
-          break;
-        default:
-          break;
+  const formatTime = (time) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleMouseMove = () => {
+    setShowControls(true);
+    if (controlsTimeout.current) {
+      clearTimeout(controlsTimeout.current);
+    }
+    controlsTimeout.current = setTimeout(() => {
+      if (isPlaying) {
+        setShowControls(false);
       }
-    };
-
-    document.addEventListener('keydown', handleKeyPress);
-    return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [duration]);
+    }, 3000);
+  };
 
   if (error) {
     return (
-      <div className={`bg-red-50 border border-red-200 rounded-lg p-8 text-center ${className}`}>
-        <img src={assets.cross_icon} alt="Error" className="w-12 h-12 mx-auto mb-4 opacity-50" />
-        <h3 className="text-lg font-medium text-red-800 mb-2">Video Error</h3>
-        <p className="text-red-600">{error}</p>
-        <button 
-          onClick={() => window.location.reload()} 
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-        >
-          Retry
-        </button>
+      <div className="video-player">
+        <div className="video-header">
+          <h3>Error Loading Video</h3>
+          <button onClick={onClose} className="close-btn">✕ Close</button>
+        </div>
+        <div className="video-error">
+          <div className="error-icon">🎥</div>
+          <h3>Unable to Load Video</h3>
+          <p>{error}</p>
+          <div className="error-actions">
+            <button onClick={() => window.location.reload()} className="retry-btn">
+              Retry
+            </button>
+            <button onClick={onClose} className="back-btn">
+              Go Back
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`bg-black rounded-lg overflow-hidden relative group ${className}`}>
-      {/* Video Element */}
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        className="w-full h-full object-cover"
-        preload="metadata"
-        poster={isPreview ? undefined : undefined} // You can add a poster image
-      />
-
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+    <div className="video-player">
+      <div className="video-header">
+        <div className="video-title">
+          <h3>{videoTitle || 'Video'}</h3>
+          <span className="file-info">Video Player</span>
         </div>
-      )}
+        <button onClick={onClose} className="close-btn">✕ Close</button>
+      </div>
 
-      {/* Preview Overlay */}
-      {isPreview && (
-        <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
-          <div className="text-center text-white">
-            <img src={assets.play_icon} alt="Play" className="w-16 h-16 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold mb-2">Preview Video</h3>
-            <p className="text-sm opacity-90">This is a preview. Enroll to access the full content.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Controls Overlay */}
       <div 
-        className={`absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${showControls ? 'opacity-100' : ''}`}
-        onMouseEnter={() => setShowControls(true)}
-        onMouseLeave={() => setShowControls(false)}
+        className={`video-player-container ${isFullscreen ? 'fullscreen' : ''}`}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => isPlaying && setShowControls(false)}
       >
-        {/* Top Controls */}
-        <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
-          <div className="text-white">
-            <h3 className="font-semibold">{title}</h3>
-            {description && <p className="text-sm opacity-90">{description}</p>}
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="video-element"
+          onClick={togglePlayPause}
+          onDoubleClick={toggleFullscreen}
+        />
+
+        {loading && (
+          <div className="video-loading">
+            <div className="loading-spinner"></div>
+            <p>Loading video...</p>
           </div>
-          <button
-            onClick={toggleFullscreen}
-            className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
-          >
-            <img src={assets.arrow_icon} alt="Fullscreen" className="w-5 h-5" />
-          </button>
-        </div>
+        )}
 
-        {/* Center Play Button */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <button
-            onClick={togglePlay}
-            className="p-4 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full transition-all duration-200 transform hover:scale-110"
-          >
-            <img 
-              src={isPlaying ? assets.pause_icon || assets.play_icon : assets.play_icon} 
-              alt={isPlaying ? "Pause" : "Play"} 
-              className="w-8 h-8" 
-            />
-          </button>
-        </div>
-
-        {/* Bottom Controls */}
-        <div className="absolute bottom-4 left-4 right-4">
+        {/* Video Controls */}
+        <div className={`video-controls ${showControls ? 'visible' : 'hidden'}`}>
           {/* Progress Bar */}
-          <div 
-            className="w-full h-1 bg-white bg-opacity-30 rounded-full cursor-pointer mb-3"
-            onClick={handleSeek}
-          >
+          <div className="progress-container">
             <div 
-              className="h-full bg-blue-500 rounded-full transition-all duration-200"
-              style={{ width: `${(currentTime / duration) * 100}%` }}
-            />
+              className="progress-bar"
+              onClick={handleSeek}
+            >
+              <div 
+                className="progress-filled"
+                style={{ width: `${(currentTime / duration) * 100}%` }}
+              ></div>
+              <div 
+                className="progress-handle"
+                style={{ left: `${(currentTime / duration) * 100}%` }}
+              ></div>
+            </div>
           </div>
 
           {/* Control Buttons */}
-          <div className="flex items-center justify-between text-white">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={togglePlay}
-                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
-              >
-                <img 
-                  src={isPlaying ? assets.pause_icon || assets.play_icon : assets.play_icon} 
-                  alt={isPlaying ? "Pause" : "Play"} 
-                  className="w-5 h-5" 
-                />
+          <div className="controls-row">
+            <div className="controls-left">
+              <button onClick={togglePlayPause} className="play-pause-btn">
+                {isPlaying ? '⏸️' : '▶️'}
               </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleMute}
-                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
-                >
-                  <img 
-                    src={isMuted ? assets.mute_icon || assets.play_icon : assets.play_icon} 
-                    alt={isMuted ? "Unmute" : "Mute"} 
-                    className="w-5 h-5" 
-                  />
+              
+              <div className="volume-controls">
+                <button onClick={toggleMute} className="mute-btn">
+                  {isMuted ? '🔇' : '🔊'}
                 </button>
                 <input
                   type="range"
@@ -294,21 +256,61 @@ const VideoPlayer = ({
                   step="0.1"
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
-                  className="w-20 h-1 bg-white bg-opacity-30 rounded-lg appearance-none cursor-pointer"
+                  className="volume-slider"
                 />
               </div>
 
-              <span className="text-sm">
+              <div className="time-display">
                 {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-sm">
-                {isPreview ? 'Preview' : 'Full Video'}
-              </span>
+            <div className="controls-right">
+              <div className="playback-rate">
+                <select 
+                  value={playbackRate} 
+                  onChange={(e) => changePlaybackRate(parseFloat(e.target.value))}
+                  className="rate-select"
+                >
+                  <option value={0.5}>0.5x</option>
+                  <option value={0.75}>0.75x</option>
+                  <option value={1}>1x</option>
+                  <option value={1.25}>1.25x</option>
+                  <option value={1.5}>1.5x</option>
+                  <option value={2}>2x</option>
+                </select>
+              </div>
+
+              <button onClick={toggleFullscreen} className="fullscreen-btn">
+                {isFullscreen ? '🗗' : '🗖'}
+              </button>
             </div>
           </div>
+        </div>
+
+        {/* Center Play Button */}
+        {!isPlaying && !loading && (
+          <div className="center-play-btn" onClick={togglePlayPause}>
+            <div className="play-icon">▶️</div>
+          </div>
+        )}
+      </div>
+
+      {/* Video Info */}
+      <div className="video-info">
+        <div className="info-item">
+          <span className="info-label">Duration:</span>
+          <span className="info-value">{formatTime(duration)}</span>
+        </div>
+        <div className="info-item">
+          <span className="info-label">Progress:</span>
+          <span className="info-value">
+            {duration > 0 ? Math.round((currentTime / duration) * 100) : 0}%
+          </span>
+        </div>
+        <div className="info-item">
+          <span className="info-label">Speed:</span>
+          <span className="info-value">{playbackRate}x</span>
         </div>
       </div>
     </div>
@@ -316,4 +318,3 @@ const VideoPlayer = ({
 };
 
 export default VideoPlayer;
-
