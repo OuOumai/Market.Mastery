@@ -1,25 +1,37 @@
 import React, { useState, useContext, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { SignIn, useUser, SignedIn, SignedOut } from '@clerk/clerk-react'
+import { SignIn, useUser, SignedIn, SignedOut, useSignIn } from '@clerk/clerk-react'
 import { AppContext } from '../../context/AppContext'
 
 const LoginPage = () => {
-  const [selectedRole, setSelectedRole] = useState(null)
+  const [selectedRole, setSelectedRole] = useState(localStorage.getItem('selectedRole') || null)
   const [showSignIn, setShowSignIn] = useState(false)
   const navigate = useNavigate()
-  const { user, isLoaded, isSignedIn } = useUser()
-  const { assignRole, ROLES, userRole } = useContext(AppContext)
+  const { user, isLoaded, isSignedIn } = useUser();
+  const { assignRole, ROLES, clearUserRole } = useContext(AppContext);
+
+  useEffect(() => {
+    // On initial mount or when the user signs out, clear any role to force selection.
+    if (!isSignedIn) {
+      clearUserRole();
+      localStorage.removeItem('selectedRole');
+    }
+  }, [isSignedIn, clearUserRole]);
 
   const handleRoleSelection = (role) => {
-    if (isSignedIn) {
-      // If user is already signed in (maybe from another tab), assign the role immediately
-      assignRoleAndRedirect(role);
-    } else {
-      // If not signed in, show sign in with the selected role
-      setSelectedRole(role);
-      setShowSignIn(true);
-    }
+    // Store the selected role in localStorage to persist it across the redirect.
+    localStorage.setItem('selectedRole', role);
+    setSelectedRole(role);
+    setShowSignIn(true);
   }
+
+  // When showSignIn becomes true, we want to redirect to Clerk's hosted login page.
+  // Clerk will then redirect back to the app, where we can read the role from localStorage.
+  useEffect(() => {
+    if (showSignIn) {
+      navigate('/login#', { state: { from: 'role-selection' } });
+    }
+  }, [showSignIn, navigate]);
 
   const assignRoleAndRedirect = async (role) => {
     if (!user) return;
@@ -42,6 +54,7 @@ const LoginPage = () => {
       
       // Force immediate redirect based on the assigned role
       setTimeout(() => {
+        localStorage.removeItem('selectedRole'); // Clean up after assignment
         if (role === ROLES.STUDENT) {
           navigate('/student/dashboard', { replace: true });
         } else if (role === ROLES.EDUCATOR || role === ROLES.ADMIN) {
@@ -53,11 +66,13 @@ const LoginPage = () => {
     }
   };
 
-  const handleSignInSuccess = () => {
-    if (selectedRole) {
+  // This effect will run when the user is signed in and a role has been selected.
+  // It's the reliable way to trigger the role assignment after login.
+  useEffect(() => {
+    if (isSignedIn && selectedRole) {
       assignRoleAndRedirect(selectedRole);
     }
-  };
+  }, [isSignedIn, selectedRole]);
 
   if (!isLoaded) {
     return (
@@ -87,7 +102,7 @@ const LoginPage = () => {
           {/* Sign In Form */}
           <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
             <SignedOut>
-              <SignIn
+              <SignIn afterSignInUrl={window.location.pathname}
                 routing="hash"
                 appearance={{
                   elements: {
@@ -99,7 +114,7 @@ const LoginPage = () => {
                     formButtonPrimary: "w-full bg-blue-600 hover:bg-blue-700",
                   }
                 }}
-                afterSignInUrl="#"
+                // Clerk will handle the redirect, and our useEffect will pick it up.
               />
             </SignedOut>
             
@@ -112,12 +127,8 @@ const LoginPage = () => {
                 </div>
                 <h2 className="text-xl font-semibold text-gray-800 mb-2">Connexion réussie !</h2>
                 <p className="text-gray-600 mb-6">Configuration de votre rôle en cours...</p>
-                <button 
-                  onClick={handleSignInSuccess}
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-                >
-                  Continuer
-                </button>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="text-sm text-gray-500 mt-4">Vous allez être redirigé...</p>
               </div>
             </SignedIn>
             
@@ -126,6 +137,7 @@ const LoginPage = () => {
               <button
                 onClick={() => {
                   setShowSignIn(false);
+                  localStorage.removeItem('selectedRole');
                   setSelectedRole(null);
                 }}
                 className="w-full text-gray-500 hover:text-gray-700 text-sm py-2"

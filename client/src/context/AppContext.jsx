@@ -170,6 +170,12 @@ export const AppContextProvider = ({ children }) => {
     }
   }
 
+  const clearUserRole = () => {
+    console.log('Clearing user role');
+    setUserRole(null);
+    // We don't clear localStorage here, as the login flow will overwrite it.
+  };
+
   // Initialize user role
   useEffect(() => {
     console.log('🚀 AppContext role initialization', { isLoaded, user: !!user })
@@ -243,6 +249,7 @@ export const AppContextProvider = ({ children }) => {
     hasPermission,
     assignRole,
     requestRoleUpgrade,
+    clearUserRole,
     
     // Constants
     ROLES,

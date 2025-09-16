@@ -36,14 +36,13 @@ const LoginRouteWrapper = () => {
     );
   }
 
-  if (user && userRole) {
-    if (userRole === ROLES.STUDENT) {
+  // If user is signed in and has a role, redirect to the appropriate dashboard.
+  if (user && userRole?.primaryRole) {
+    if (userRole.primaryRole === ROLES.STUDENT) {
       return <Navigate to="/student/dashboard" replace />;
-    } else if (userRole === ROLES.EDUCATOR || userRole === ROLES.ADMIN) {
+    } else if (userRole.primaryRole === ROLES.EDUCATOR || userRole.primaryRole === ROLES.ADMIN) {
       return <Navigate to="/educator/dashboard" replace />;
     }
-    // If user is signed in but has no role, send them to the login page to select a role.
-    return <Navigate to="/role" replace />;
   }
 
   return <LoginPage />;

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CourseCard from '../../components/student/CourseCard';
 import Loading from '../../components/student/Loading';
 import './CoursesList.css';
+import { AppContext } from '../../context/AppContext';
 
 const CoursesList = () => {
   const [courses, setCourses] = useState([]);
@@ -11,6 +12,7 @@ const CoursesList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const navigate = useNavigate();
+  const { API_BASE_URL } = useContext(AppContext);
 
   useEffect(() => {
     fetchCourses();
@@ -21,7 +23,7 @@ const CoursesList = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:5000/api/courses');
+      const response = await fetch(`${API_BASE_URL}/api/courses`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch courses');

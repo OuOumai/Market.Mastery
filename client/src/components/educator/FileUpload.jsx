@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useContext } from 'react';
 import { assets } from '../../assets/assets';
+import { AppContext } from '../../context/AppContext';
 
 const FileUpload = ({ 
   courseId, 
@@ -16,6 +17,7 @@ const FileUpload = ({
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
+  const { API_BASE_URL } = useContext(AppContext);
 
   // Handle file selection
   const handleFileSelect = (files) => {
@@ -86,7 +88,7 @@ const FileUpload = ({
         formData.append('description', `Uploaded file: ${file.name}`);
         formData.append('isPreview', 'false');
 
-        const response = await fetch('http://localhost:5000/api/media/upload', {
+        const response = await fetch(`${API_BASE_URL}/api/media/upload`, {
           method: 'POST',
           body: formData,
         });
@@ -266,4 +268,3 @@ const FileUpload = ({
 };
 
 export default FileUpload;
-

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { assets } from '../../assets/assets';
+import { AppContext } from '../../context/AppContext';
 
 const FileScanner = ({ className = "" }) => {
   const [isScanning, setIsScanning] = useState(false);
@@ -7,11 +8,12 @@ const FileScanner = ({ className = "" }) => {
   const [scanResult, setScanResult] = useState(null);
   const [error, setError] = useState(null);
   const [directoryPath, setDirectoryPath] = useState('');
+  const { API_BASE_URL } = useContext(AppContext);
 
   // Fetch scanner status
   const fetchStatus = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/scanner/status');
+      const response = await fetch(`${API_BASE_URL}/api/scanner/status`);
       const data = await response.json();
       
       if (data.success) {
@@ -35,7 +37,7 @@ const FileScanner = ({ className = "" }) => {
     setScanResult(null);
 
     try {
-      const response = await fetch('http://localhost:5000/api/scanner/scan', {
+      const response = await fetch(`${API_BASE_URL}/api/scanner/scan`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -67,7 +69,7 @@ const FileScanner = ({ className = "" }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/scanner/watch', {
+      const response = await fetch(`${API_BASE_URL}/api/scanner/watch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,7 +94,7 @@ const FileScanner = ({ className = "" }) => {
   // Stop watching
   const handleStopWatch = async (path = null) => {
     try {
-      const response = await fetch('http://localhost:5000/api/scanner/stop', {
+      const response = await fetch(`${API_BASE_URL}/api/scanner/stop`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -248,4 +250,3 @@ const FileScanner = ({ className = "" }) => {
 };
 
 export default FileScanner;
-

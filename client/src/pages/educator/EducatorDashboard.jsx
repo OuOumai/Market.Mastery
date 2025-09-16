@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import './EducatorDashboard.css';
+import { AppContext } from '../../context/AppContext';
 
 const EducatorDashboard = () => {
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -11,31 +10,11 @@ const EducatorDashboard = () => {
     instructor: '',
     category: ''
   });
+  const [localLoading, setLocalLoading] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [chapterName, setChapterName] = useState('');
   const [uploadFiles, setUploadFiles] = useState([]);
-
-  // Fetch educator's courses
-  useEffect(() => {
-    fetchCourses();
-  }, []);
-
-  const fetchCourses = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('http://localhost:5000/api/courses');
-      if (response.ok) {
-        const coursesData = await response.json();
-        setCourses(coursesData);
-      } else {
-        console.error('Failed to fetch courses');
-      }
-    } catch (error) {
-      console.error('Error fetching courses:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { API_BASE_URL, courses, loading, fetchCoursesFromBackend } = useContext(AppContext);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -47,15 +26,18 @@ const EducatorDashboard = () => {
 
   const handleCreateCourse = async (e) => {
     e.preventDefault();
+    console.log('📝 Tentative de création de cours:', formData); // ← Log ajouté
     
-    if (!formData.name.trim()) {
+    if (!formData.name.trim()) { // ← Corrigé de formData.title à formData.name
       alert('Course title is required');
       return;
     }
 
     try {
-      setLoading(true);
-      const response = await fetch('http://localhost:5000/api/courses', {
+      setLocalLoading(true);
+      console.log('🚀 Envoi de la requête...'); // ← Log ajouté
+
+      const response = await fetch(`${API_BASE_URL}/api/courses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -63,8 +45,11 @@ const EducatorDashboard = () => {
         body: JSON.stringify(formData)
       });
 
+      console.log('📡 Réponse reçue:', response.status, response.statusText); // ← Log ajouté
+
       if (response.ok) {
         const result = await response.json();
+        console.log('✅ Succès:', result); // ← Log ajouté
         alert('Course created successfully!');
         setFormData({
           name: '',
@@ -73,16 +58,17 @@ const EducatorDashboard = () => {
           category: ''
         });
         setShowCreateForm(false);
-        fetchCourses(); // Refresh the courses list
+        fetchCoursesFromBackend(); // Refresh the courses list from context
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to create course');
+        console.error('❌ Erreur du serveur:', error); // ← Log ajouté
+        alert(error.message || error.error || 'Failed to create course');
       }
     } catch (error) {
-      console.error('Error creating course:', error);
+      console.error('💥 Erreur de connexion:', error);
       alert('Failed to create course');
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
@@ -93,7 +79,7 @@ const EducatorDashboard = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/courses/${courseFolder}/chapters`, {
+      const response = await fetch(`${API_BASE_URL}/api/courses/${courseFolder}/chapters`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -104,7 +90,7 @@ const EducatorDashboard = () => {
       if (response.ok) {
         alert('Chapter created successfully!');
         setChapterName('');
-        fetchCourses(); // Refresh courses to show new chapter
+        fetchCoursesFromBackend(); // Refresh courses to show new chapter
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to create chapter');
@@ -128,7 +114,7 @@ const EducatorDashboard = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/courses/${courseFolder}/chapters/${chapterName}/upload`,
+        `${API_BASE_URL}/api/courses/${courseFolder}/chapters/${chapterName}/upload`,
         {
           method: 'POST',
           body: formData
@@ -138,7 +124,7 @@ const EducatorDashboard = () => {
       if (response.ok) {
         alert('Files uploaded successfully!');
         setUploadFiles([]);
-        fetchCourses(); // Refresh to show new files
+        fetchCoursesFromBackend(); // Refresh to show new files
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to upload files');
@@ -228,8 +214,8 @@ const EducatorDashboard = () => {
             </div>
             
             <div className="form-actions">
-              <button type="submit" disabled={loading}>
-                {loading ? 'Creating...' : 'Create Course'}
+              <button type="submit" disabled={localLoading}>
+                {localLoading ? 'Creating...' : 'Create Course'}
               </button>
               <button 
                 type="button" 

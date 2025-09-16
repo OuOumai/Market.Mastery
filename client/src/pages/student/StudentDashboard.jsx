@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CourseCard from '../../components/student/CourseCard';
 import Loading from '../../components/student/Loading';
 import './StudentDashboard.css';
+import { AppContext } from '../../context/AppContext';
 
 const StudentDashboard = () => {
   const [courses, setCourses] = useState([]);
@@ -17,6 +18,7 @@ const StudentDashboard = () => {
     inProgressCount: 0
   });
   const navigate = useNavigate();
+  const { API_BASE_URL } = useContext(AppContext);
 
   useEffect(() => {
     fetchDashboardData();
@@ -28,7 +30,7 @@ const StudentDashboard = () => {
       setError(null);
       
       // Fetch all courses
-      const response = await fetch('http://localhost:5000/api/courses');
+      const response = await fetch(`${API_BASE_URL}/api/courses`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch courses');

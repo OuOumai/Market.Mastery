@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import CourseStructure from '../../components/student/CourseStructure';
 import PDFViewer from '../../components/student/PDFViewer';
 import VideoPlayer from '../../components/student/VideoPlayer';
 import Loading from '../../components/student/Loading';
 import './CourseDetails.css';
+import { AppContext } from '../../context/AppContext';
 
 const CourseDetails = () => {
   const { courseFolder } = useParams();
@@ -14,6 +15,7 @@ const CourseDetails = () => {
   const [error, setError] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [viewMode, setViewMode] = useState('structure'); // 'structure', 'pdf', 'video'
+  const { API_BASE_URL } = useContext(AppContext);
 
   useEffect(() => {
     if (courseFolder) {
@@ -26,7 +28,7 @@ const CourseDetails = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`http://localhost:5000/api/courses/${courseFolder}`);
+      const response = await fetch(`${API_BASE_URL}/api/courses/${courseFolder}`);
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -168,7 +170,7 @@ const CourseDetails = () => {
         
         {viewMode === 'pdf' && selectedFile && (
           <PDFViewer 
-            fileUrl={`http://localhost:5000${selectedFile.path}`}
+            fileUrl={`${API_BASE_URL}${selectedFile.path}`}
             fileName={selectedFile.name}
             onClose={handleBackToStructure}
           />
@@ -176,7 +178,7 @@ const CourseDetails = () => {
         
         {viewMode === 'video' && selectedFile && (
           <VideoPlayer 
-            videoUrl={`http://localhost:5000${selectedFile.path}`}
+            videoUrl={`${API_BASE_URL}${selectedFile.path}`}
             videoTitle={selectedFile.name}
             onClose={handleBackToStructure}
           />
