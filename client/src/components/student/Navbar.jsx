@@ -19,10 +19,7 @@ const Navbar = () => {
             <Link to="/student/courses" className="navbar-item hover:text-blue-600 transition-colors">
               Courses
             </Link>
-            <Link to="/role-selector" className="navbar-item hover:text-blue-600 transition-colors">
-              Switch Role
-            </Link>
-            <UserButton />
+            <UserButton afterSignOutUrl="/login" />
           </SignedIn>
           
           <SignedOut>
